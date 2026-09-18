@@ -12,6 +12,7 @@ import { noop } from "@buildtheearth/bot-utils"
 import { ActivityType } from "discord.js"
 import getBearerToken from "../util/getBearerToken.util.js"
 import OAuthToken from "../entities/OAuthToken.entity.js"
+import SuggestionDashboard from "../struct/client/SuggestionDashboard.js"
 
 export default async function clientReady(this: BotClient): Promise<void> {
     if (!this.user) return //never gonna happen, its on ready, discord.js needs some better type assertion
@@ -27,6 +28,10 @@ export default async function clientReady(this: BotClient): Promise<void> {
     this.logger.debug("Loading interaction handlers...")
     await this.componentHandlers.load()
     this.logger.info("Loaded interaction handlers.")
+
+    await SuggestionDashboard.for(this).start().catch(error => {
+        this.logger.error(`Suggestion dashboard could not start: ${String(error)}`)
+    })
 
     const guildList = await this.guilds.fetch()
 

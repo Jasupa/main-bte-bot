@@ -85,6 +85,7 @@
         "webpack-node-externals": "^3.0.0"
     },
     "scripts": {
+        "test:suggestion-dashboard": "tsc && node --test scripts/suggestion-dashboard.test.mjs",
         "start": "nps",
         "prepare": "husky install",
         "postinstall": "patch-package",

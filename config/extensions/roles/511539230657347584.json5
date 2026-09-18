@@ -1,0 +1,4 @@
+// Jasupa test server. Add role IDs here when testing other role-based bot commands.
+{
+    ANY: "511539230657347584"
+}

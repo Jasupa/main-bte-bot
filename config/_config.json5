@@ -104,4 +104,11 @@
         pass: ""
     },
     oauthEnabled: false,
+    suggestionDashboard: {
+        enabled: false,
+        channelId: "", // Dedicated text channel in the Staff server
+        channelName: "", // Or an unambiguous channel name, e.g. "suggestions"
+        reviewerRoleIds: [], // Additional reviewers; ADMIN and MANAGER already have access
+        timezone: "Europe/Amsterdam", // Weekly update: Monday at 09:00
+    },
 }
