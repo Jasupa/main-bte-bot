@@ -1,5 +1,5 @@
 import "reflect-metadata"
-import { test } from "node:test"
+import { test, beforeEach } from "node:test"
 import assert from "node:assert/strict"
 import { DatabaseSync } from "node:sqlite"
 import {
@@ -10,6 +10,7 @@ import {
     TextChannel
 } from "discord.js"
 import Dashboard from "../dist/struct/client/SuggestionDashboard.js"
+import Preference from "../dist/entities/SuggestionDashboardPreference.entity.js"
 import DashboardPost from "../dist/entities/SuggestionDashboardPost.entity.js"
 import {
     calendarDate,
@@ -18,8 +19,18 @@ import {
     filterSql,
     validateFilters,
     validDate,
-    canReview
+    canReview,
+    validateTimezone
 } from "../dist/util/suggestionDashboard.util.js"
+
+beforeEach(t => {
+    const preferences = new Map()
+    t.mock.method(Preference, "findOne", async ({ userId }) => preferences.get(userId))
+    t.mock.method(Preference, "save", async value => {
+        preferences.set(value.userId, value)
+        return value
+    })
+})
 
 const filters = (overrides = {}) => ({
     query: "",
@@ -129,6 +140,63 @@ function useRows(dashboard, count = 12) {
     return queries
 }
 
+test("personal timezones change date boundaries, including DST and midnight transitions", () => {
+    const day = filters({ from: "2026-03-08", to: "2026-03-08" })
+    const ny = filterSql(day, "America/New_York").params
+    const tokyo = filterSql(day, "Asia/Tokyo").params
+    assert.equal(ny.from.toISOString(), "2026-03-08T05:00:00.000Z")
+    assert.equal(ny.until.toISOString(), "2026-03-09T04:00:00.000Z")
+    assert.equal(tokyo.from.toISOString(), "2026-03-07T15:00:00.000Z")
+    assert.equal(tokyo.until.toISOString(), "2026-03-08T15:00:00.000Z")
+    assert.equal(
+        midnight("2018-11-04", "America/Sao_Paulo").toISOString(),
+        "2018-11-04T03:00:00.000Z"
+    )
+    assert.equal(
+        midnight("2011-12-30", "Pacific/Apia").getTime(),
+        midnight("2011-12-31", "Pacific/Apia").getTime()
+    )
+    assert.equal(
+        midnight("2026-09-19", "Asia/Kathmandu").toISOString(),
+        "2026-09-18T18:15:00.000Z"
+    )
+    assert.equal(validateTimezone("Europe/Amsterdam"), "Europe/Amsterdam")
+    assert.throws(() => validateTimezone("Not/AZone"))
+    assert.throws(() => validateTimezone("+02:00"))
+})
+
+test("timezone preferences survive reopening and do not affect other users or weekly totals", async () => {
+    const dashboard = new Dashboard(clientFixture())
+    useRows(dashboard)
+    const [id, alice] = await dashboard.createSession("alice")
+    const [, bob] = await dashboard.createSession("bob")
+    dashboard.setPeriod(alice, "7")
+    await dashboard.handle(
+        interactionFixture({
+            customId: `sugd:${id}:filters`,
+            modal: { from: alice.from, to: alice.to, timezone: "America/New_York" }
+        })
+    )
+    assert.equal(alice.timezone, "America/New_York")
+    assert.equal(alice.period, "7")
+    assert.equal(alice.to, calendarDate(new Date(), "America/New_York"))
+    assert.equal(bob.timezone, "Europe/Amsterdam")
+    assert.equal(dashboard.timezone, "Europe/Amsterdam")
+    const restarted = new Dashboard(clientFixture())
+    const [, reopened] = await restarted.createSession("alice")
+    assert.equal(reopened.timezone, "America/New_York")
+    assert.equal(reopened.timezoneSelected, true)
+    await dashboard.handle(interactionFixture({ customId: `sugd:${id}:reset` }))
+    assert.equal(alice.timezone, "America/New_York")
+    const invalid = interactionFixture({
+        customId: `sugd:${id}:filters`,
+        modal: { timezone: "Invalid/Place" }
+    })
+    await dashboard.handle(invalid)
+    assert.equal(invalid.calls[0][0], "reply")
+    assert.equal(alice.timezone, "America/New_York")
+})
+
 test("calendar weeks and inclusive dates follow Amsterdam daylight saving time", () => {
     assert.deepEqual(previousWeek(new Date("2026-09-14T10:00:00Z"), "Europe/Amsterdam"), {
         from: "2026-09-07",
@@ -213,7 +281,7 @@ test("access requires Staff guild and Administrator, Admin, Manager or configure
 test("page boundaries, combined sources and Discord embed/component limits", async () => {
     const dashboard = new Dashboard(clientFixture())
     useRows(dashboard)
-    const [id, session] = dashboard.createSession("alice")
+    const [id, session] = await dashboard.createSession("alice")
     let result = await dashboard.render(id, session)
     assert.equal(result.embeds[0].data.fields.length, 5)
     assert.equal(result.embeds[0].data.title, "Suggestion dashboard · Main & Staff")
@@ -233,7 +301,7 @@ test("page boundaries, combined sources and Discord embed/component limits", asy
     session.page = -10
     await dashboard.render(id, session)
     assert.equal(session.page, 0)
-    assert.equal(dashboard.modal(id, session).toJSON().components.length, 3)
+    assert.equal(dashboard.modal(id, session).toJSON().components.length, 4)
 })
 
 test("open replies ephemerally and rejected users never query suggestion data", async () => {
@@ -253,7 +321,7 @@ test("open replies ephemerally and rejected users never query suggestion data", 
 test("session ownership, expiration and removed permissions are enforced on every click", async () => {
     const dashboard = new Dashboard(clientFixture())
     const queries = useRows(dashboard)
-    const [id, session] = dashboard.createSession("alice")
+    const [id, session] = await dashboard.createSession("alice")
     for (const options of [{ user: "bob" }, { roles: [] }, { guild: "main" }]) {
         const denied = interactionFixture({ customId: `sugd:${id}:next`, ...options })
         assert.equal(await dashboard.handle(denied), true)
@@ -273,8 +341,8 @@ test("session ownership, expiration and removed permissions are enforced on ever
 test("filters reset page, stay private and do not change another user session", async () => {
     const dashboard = new Dashboard(clientFixture())
     useRows(dashboard)
-    const [id, alice] = dashboard.createSession("alice")
-    const [, bob] = dashboard.createSession("bob")
+    const [id, alice] = await dashboard.createSession("alice")
+    const [, bob] = await dashboard.createSession("bob")
     alice.page = 2
     const select = interactionFixture({
         customId: `sugd:${id}:status`,

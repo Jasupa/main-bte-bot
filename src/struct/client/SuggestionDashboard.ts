@@ -18,6 +18,7 @@ import { Cron } from "croner"
 import type BotClient from "../BotClient.js"
 import Suggestion from "../../entities/Suggestion.entity.js"
 import SuggestionDashboardPost from "../../entities/SuggestionDashboardPost.entity.js"
+import SuggestionDashboardPreference from "../../entities/SuggestionDashboardPreference.entity.js"
 import {
     DASHBOARD_STATUSES,
     DashboardFilters,
@@ -27,10 +28,13 @@ import {
     midnight,
     previousWeek,
     shiftDate,
-    validateFilters
+    validateFilters,
+    validateTimezone
 } from "../../util/suggestionDashboard.util.js"
 
 interface Session extends DashboardFilters {
+    timezone: string
+    timezoneSelected: boolean
     owner: string
     page: number
     expires: number
@@ -129,7 +133,7 @@ export default class SuggestionDashboard {
                         : "The weekly update is already being processed. Please try again shortly."
                 })
             } else {
-                const [id, session] = this.createSession(interaction.user.id)
+                const [id, session] = await this.createSession(interaction.user.id)
                 await interaction.editReply(await this.render(id, session))
             }
         } catch (error) {
@@ -143,12 +147,15 @@ export default class SuggestionDashboard {
         }
     }
 
-    private createSession(owner: string): [string, Session] {
+    private async createSession(owner: string): Promise<[string, Session]> {
+        const preference = await SuggestionDashboardPreference.findOne({ userId: owner })
         this.prune()
         if (this.sessions.size >= 1000)
             this.sessions.delete(this.sessions.keys().next().value!)
         const id = randomUUID().slice(0, 12)
         const session: Session = {
+            timezone: preference?.timezone || this.timezone,
+            timezoneSelected: Boolean(preference),
             owner,
             page: 0,
             expires: Date.now() + SESSION_TTL,
@@ -171,12 +178,12 @@ export default class SuggestionDashboard {
     }
 
     private setPeriod(session: Session, period: string): void {
-        const today = calendarDate(new Date(), this.timezone)
+        const today = calendarDate(new Date(), session.timezone)
         session.period = period
         session.from = ""
         session.to = ""
         if (period === "week")
-            Object.assign(session, previousWeek(new Date(), this.timezone))
+            Object.assign(session, previousWeek(new Date(), session.timezone))
         if (["7", "30", "90"].includes(period)) {
             session.from = shiftDate(today, -(Number(period) - 1))
             session.to = today
@@ -184,8 +191,8 @@ export default class SuggestionDashboard {
         session.page = 0
     }
 
-    private search(filters: DashboardFilters) {
-        const { where, params } = filterSql(filters, this.timezone)
+    private search(filters: DashboardFilters & { timezone?: string }) {
+        const { where, params } = filterSql(filters, filters.timezone || this.timezone)
         return Suggestion.getRepository()
             .createQueryBuilder("s")
             .where(where, params)
@@ -214,7 +221,11 @@ export default class SuggestionDashboard {
             .setDescription(
                 `**${total} suggestions** · ${
                     DASHBOARD_STATUSES[session.status]
-                }\n${range} (${this.timezone})${
+                }\n${range} (${session.timezone})${
+                    !session.timezoneSelected
+                        ? "\nSet your timezone in Search / dates; currently using the server default."
+                        : ""
+                }${
                     session.query
                         ? `\nSearch: **${clean(session.query, 200)}**`
                         : "\nNewest suggestions first."
@@ -328,7 +339,7 @@ export default class SuggestionDashboard {
                 ),
                 input(
                     "from",
-                    `From (inclusive, ${this.timezone})`.slice(0, 45),
+                    "From (inclusive, in your timezone)",
                     session.from,
                     10,
                     "YYYY-MM-DD, e.g. 2026-09-01"
@@ -339,6 +350,13 @@ export default class SuggestionDashboard {
                     session.to,
                     10,
                     "YYYY-MM-DD, leave empty for no end date"
+                ),
+                input(
+                    "timezone",
+                    "Your timezone (saved for future visits)",
+                    session.timezone,
+                    100,
+                    "Europe/Amsterdam, America/New_York or UTC"
                 )
             )
     }
@@ -366,7 +384,7 @@ export default class SuggestionDashboard {
             const [, id, action, end] = interaction.customId.split(":")
             if (interaction.isButton() && (id === "open" || id === "week")) {
                 await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-                const [key, session] = this.createSession(interaction.user.id)
+                const [key, session] = await this.createSession(interaction.user.id)
                 if (id === "week") {
                     session.from = action
                     session.to = end
@@ -415,6 +433,16 @@ export default class SuggestionDashboard {
                     next.page = 0
                     try {
                         validateFilters(next)
+                        next.timezone = validateTimezone(
+                            interaction.fields.getTextInputValue("timezone").trim() ||
+                                session.timezone
+                        )
+                        if (
+                            next.from === session.from &&
+                            next.to === session.to &&
+                            session.period !== "custom"
+                        )
+                            this.setPeriod(next, session.period)
                     } catch (error) {
                         await interaction.reply({
                             content: (error as Error).message,
@@ -424,6 +452,13 @@ export default class SuggestionDashboard {
                     }
                     if (interaction.isFromMessage()) await interaction.deferUpdate()
                     else await interaction.deferReply({ flags: MessageFlags.Ephemeral })
+                    await SuggestionDashboardPreference.save(
+                        Object.assign(new SuggestionDashboardPreference(), {
+                            userId: session.owner,
+                            timezone: next.timezone
+                        })
+                    )
+                    next.timezoneSelected = true
                 } else {
                     await interaction.deferUpdate()
                     if (interaction.isStringSelectMenu()) {

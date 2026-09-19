@@ -8,6 +8,8 @@ The dashboard runs inside the existing bot. It has no website, separate bot or d
 -   **Search / dates** searches the title and full description, regardless of case. `%` and `_` are treated literally.
 -   Filter by **status**, **date range** and optionally **server**. Unanswered includes NULL, an empty status and `open`.
 -   Choose all dates, the previous calendar week, the last 7/30/90 days, or inclusive custom dates in `YYYY-MM-DD` format.
+-   Set **Your timezone** in **Search / dates**, for example `Europe/Amsterdam` or `America/New_York`. Discord does not expose your device timezone to bots. Until you choose one, the menu explicitly shows the server default. Your choice is saved per user in `suggestion_dashboard_preferences` and survives restarts. Date filters use midnight in that timezone, including daylight saving changes; Reset keeps your timezone. Existing open menus keep their current timezone until reopened or edited.
+-   Weekly public totals and publication time use the configured server timezone. Opening a weekly menu uses the dates on that post in your saved timezone, so its private total may differ near the date boundaries.
 -   **Previous / Next** show five suggestions per page. Filters are preserved; changing a filter returns to page one. **Reset** clears all filters.
 -   **Open in Discord** links to the original suggestion. Anonymous authors are not disclosed.
 -   Only the weekly launcher is posted to the channel. Search terms, menus, results and errors are visible only to the person using them.

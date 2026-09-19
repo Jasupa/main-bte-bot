@@ -46,35 +46,43 @@ export function shiftDate(value: string, days: number): string {
     return date.toISOString().slice(0, 10)
 }
 
-// Convert a calendar midnight to UTC, including Amsterdam's DST transitions.
+export function validateTimezone(value: string): string {
+    if (!value || value.length > 100 || (!value.includes("/") && value !== "UTC"))
+        throw new Error(
+            "Enter a timezone such as Europe/Amsterdam, America/New_York or UTC."
+        )
+    try {
+        return new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions()
+            .timeZone
+    } catch {
+        throw new Error(
+            "Unknown timezone. Try Europe/Amsterdam, America/New_York or UTC."
+        )
+    }
+}
+
+// Convert a calendar midnight to UTC, including daylight saving transitions.
 export function midnight(value: string, timezone: string): Date {
     const target = new Date(`${value}T00:00:00Z`).getTime()
-    let guess = target
+    let low = target - 48 * 60 * 60 * 1000
+    let high = target + 48 * 60 * 60 * 1000
     const formatter = new Intl.DateTimeFormat("en-GB", {
         timeZone: timezone,
         year: "numeric",
         month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hourCycle: "h23"
+        day: "2-digit"
     })
-    for (let index = 0; index < 3; index++) {
+    // Find the first instant of this local date, even when midnight is skipped
+    // or repeated. A skipped date has an empty interval, ending at the next day.
+    while (low < high) {
+        const guess = Math.floor((low + high) / 2)
         const parts = formatter.formatToParts(new Date(guess))
-        const part = (type: string) =>
-            Number(parts.find(item => item.type === type)!.value)
-        const wall = Date.UTC(
-            part("year"),
-            part("month") - 1,
-            part("day"),
-            part("hour"),
-            part("minute"),
-            part("second")
-        )
-        guess += target - wall
+        const part = (type: string) => parts.find(item => item.type === type)!.value
+        const date = `${part("year")}-${part("month")}-${part("day")}`
+        if (date < value) low = guess + 1
+        else high = guess
     }
-    return new Date(guess)
+    return new Date(low)
 }
 
 export function previousWeek(now: Date, timezone: string) {
