@@ -3,12 +3,35 @@ import { truncateString } from "@buildtheearth/bot-utils"
 import { isSuggestInfo } from "../typings/InteractionInfo.js"
 import {
     ModalSubmitInteraction,
+    MessageFlags,
     TextChannel,
     ThreadAutoArchiveDuration
 } from "discord.js"
 import BotClient from "../struct/BotClient.js"
 
 export default async function createSuggestion(
+    interaction: ModalSubmitInteraction,
+    client: BotClient
+): Promise<void> {
+    try {
+        await submitSuggestion(interaction, client)
+    } catch (error) {
+        client.logger.error(`Suggestion submission failed: ${String(error)}`)
+        const content =
+            "Could not finish creating your suggestion. Check the suggestions channel before trying again."
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content }).catch(() => null)
+        } else {
+            await interaction
+                .reply({ content, flags: MessageFlags.Ephemeral })
+                .catch(() => null)
+        }
+    } finally {
+        client.interactionInfo.delete(interaction.customId)
+    }
+}
+
+async function submitSuggestion(
     interaction: ModalSubmitInteraction,
     client: BotClient
 ): Promise<void> {
@@ -30,6 +53,7 @@ export default async function createSuggestion(
             return
         }
 
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral })
         const identifier = info.subsuggestion
         const extend = identifier ? Suggestion.parseIdentifier(identifier) : null
 
@@ -53,7 +77,8 @@ export default async function createSuggestion(
                 interaction.locale
             )
         if (error) {
-            await client.response.sendError(interaction, error)
+            await interaction.editReply({ content: error })
+            return
         }
 
         const suggestion = new Suggestion()
@@ -83,7 +108,7 @@ export default async function createSuggestion(
                     ) as TextChannel
                 ).threads.fetch(old.thread)
                 if (thread)
-                    client.response.sendSuccess(thread, {
+                    await client.response.sendSuccess(thread, {
                         description: `**New subsuggestion:** [${title}](${suggestion.getURL(
                             client
                         )},)`
@@ -102,12 +127,9 @@ export default async function createSuggestion(
             await thread.setRateLimitPerUser(1)
             suggestion.thread = thread.id
             await suggestion.save()
-            client.response.sendSuccess(
-                interaction,
-                { description: "Suggestion created!" },
-                true
-            )
         }
+
+        await interaction.editReply({ content: "Suggestion created!" })
 
         await suggestionMessage.react(client.config.emojis.upvote)
         await suggestionMessage.react(client.config.emojis.downvote)

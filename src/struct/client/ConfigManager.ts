@@ -69,6 +69,12 @@ export default class ConfigManager {
     websiteToken!: string
     wmSocket!: string
     oauthEnabled!: boolean
+    suggestionDashboard?: {
+        enabled: boolean
+        channelId: string
+        channelName?: string
+        accessRoleId?: string
+    }
 
     constructor(client: BotClient) {
         this.client = client

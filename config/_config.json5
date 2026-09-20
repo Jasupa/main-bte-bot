@@ -104,4 +104,10 @@
         pass: ""
     },
     oauthEnabled: false,
+    suggestionDashboard: {
+        enabled: false,
+        channelId: "",
+        channelName: "",
+        accessRoleId: ""
+    }
 }

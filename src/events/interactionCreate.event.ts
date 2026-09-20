@@ -26,12 +26,14 @@ import _ from "lodash"
 import SuspiciousUser from "../entities/SuspiciousUser.entity.js"
 import languageDropdown from "../dropdowns/language.dropdown.js"
 import teamMenu from "../menus/team.menu.js"
+import SuggestionDashboard from "../struct/client/SuggestionDashboard.js"
 
 export default async function (
     this: BotClient,
     interaction: Interaction
 ): Promise<unknown> {
     if (interaction.user.bot) return
+    if (await SuggestionDashboard.for(this).handle(interaction)) return
 
     if (
         interaction.type != InteractionType.ApplicationCommand &&
