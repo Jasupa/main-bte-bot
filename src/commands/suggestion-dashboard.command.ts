@@ -10,7 +10,7 @@ export default new Command({
         {
             name: "publish",
             description:
-                "Post or find this week's menus in Main and Staff (Staff Admins/Managers).",
+                "Post or find this week's menus in Main and Staff (Staff server only).",
             required: false,
             optionType: "BOOLEAN"
         }

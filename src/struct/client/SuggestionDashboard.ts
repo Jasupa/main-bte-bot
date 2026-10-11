@@ -19,7 +19,6 @@ import {
     escapeMarkdown
 } from "discord.js"
 import { formatTimestamp, truncateString } from "@buildtheearth/bot-utils"
-import BotGuildMember from "../discord/BotGuildMember.js"
 import { discordEpoch } from "../../util/discordEpoch.js"
 import { randomUUID } from "crypto"
 import { Cron } from "croner"
@@ -128,21 +127,7 @@ export default class SuggestionDashboard {
 
     private canUseDashboard(interaction: Interaction, publish = false): boolean {
         if (!interaction.member) return false
-        const member =
-            interaction.member instanceof GuildMember
-                ? interaction.member
-                : interaction.guild?.members.cache.get(interaction.user.id)
-        if (publish) {
-            return (
-                this.canViewStaffSuggestions(interaction) &&
-                !!member &&
-                BotGuildMember.hasRole(
-                    member,
-                    [this.client.roles.ADMIN, this.client.roles.MANAGER],
-                    this.client
-                )
-            )
-        }
+        if (publish) return this.canViewStaffSuggestions(interaction)
         if (interaction.guildId === this.client.config.guilds.staff) return true
         if (interaction.guildId !== this.client.config.guilds.main) return false
         const roleId = this.client.config.suggestionDashboard?.mainAccessRoleId
@@ -173,7 +158,7 @@ export default class SuggestionDashboard {
             await interaction.reply({
                 content:
                     error ||
-                    "The Main dashboard requires Builder+. Staff members can use the Staff dashboard. Publishing is restricted to Staff Admins and Managers.",
+                    "The Main dashboard requires Builder+. Everyone in the Staff server can browse Main and Staff suggestions and publish weekly menus.",
                 flags: MessageFlags.Ephemeral
             })
             return
