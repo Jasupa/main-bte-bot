@@ -38,5 +38,6 @@ module.exports = {
     error: 'ts-node scripts/error.cts',
     backup: 'mysqldump main_bot --user root --password --result-file "main_bot-$(date -u +\'%Y_%m_%dT%H:%M:%SZ\').sql"',
     migrate_config: 'ts-node scripts/convertOldYAML.cts',
+    migrate_suggestion_dashboard: 'node scripts/migrateSuggestionDashboard.cjs',
   }
 };

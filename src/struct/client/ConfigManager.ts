@@ -72,7 +72,6 @@ export default class ConfigManager {
     suggestionDashboard?: {
         enabled: boolean
         channels: GuildCategories
-        mainAccessRoleId: string
     }
 
     constructor(client: BotClient) {

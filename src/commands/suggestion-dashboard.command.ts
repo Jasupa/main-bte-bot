@@ -5,7 +5,7 @@ export default new Command({
     aliases: [],
     description: "Browse and search Main and Staff suggestions privately.",
 
-    permission: globalThis.client.roles.ANY,
+    permission: globalThis.client.roles.SUGGESTION_DASHBOARD,
     args: [
         {
             name: "publish",

@@ -1,6 +1,8 @@
 
 # Installation
 
+For the suggestion dashboard's required settings, migration command, and manual checks, see [Testing the suggestion dashboard](docs/suggestion-dashboard.md).
+
   
 
 This document will walk you though the installation process for both Windows and Linux].

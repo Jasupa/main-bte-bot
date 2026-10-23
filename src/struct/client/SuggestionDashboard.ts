@@ -23,6 +23,7 @@ import { discordEpoch } from "../../util/discordEpoch.js"
 import { randomUUID } from "crypto"
 import { Cron } from "croner"
 import type BotClient from "../BotClient.js"
+import BotGuildMember from "../discord/BotGuildMember.js"
 import Suggestion from "../../entities/Suggestion.entity.js"
 import SuggestionDashboardPost from "../../entities/SuggestionDashboardPost.entity.js"
 import {
@@ -125,26 +126,33 @@ export default class SuggestionDashboard {
         )
     }
 
-    private canUseDashboard(interaction: Interaction, publish = false): boolean {
-        if (!interaction.member) return false
-        if (publish) return this.canViewStaffSuggestions(interaction)
-        if (interaction.guildId === this.client.config.guilds.staff) return true
-        if (interaction.guildId !== this.client.config.guilds.main) return false
-        const roleId = this.client.config.suggestionDashboard?.mainAccessRoleId
-        if (!roleId) return false
-        return interaction.member instanceof GuildMember
-            ? interaction.member.roles.cache.has(roleId)
-            : interaction.member.roles.includes(roleId)
+    private async canUseDashboard(
+        interaction: Interaction,
+        publish = false
+    ): Promise<boolean> {
+        if (!interaction.member || !interaction.guildId) return false
+        if (publish && !this.canViewStaffSuggestions(interaction)) return false
+        if (
+            interaction.guildId !== this.client.config.guilds.main &&
+            interaction.guildId !== this.client.config.guilds.staff
+        )
+            return false
+        const member =
+            interaction.member instanceof GuildMember
+                ? interaction.member
+                : await (
+                      await this.client.guilds.fetch(interaction.guildId)
+                  ).members.fetch(interaction.user.id)
+        return BotGuildMember.hasRole(
+            member,
+            this.client.roles.SUGGESTION_DASHBOARD,
+            this.client
+        )
     }
 
     private getConfigurationError(): string | null {
         const config = this.client.config.suggestionDashboard
-        if (
-            !config?.enabled ||
-            !config.channels?.main ||
-            !config.channels.staff ||
-            !config.mainAccessRoleId
-        )
+        if (!config?.enabled || !config.channels?.main || !config.channels.staff)
             return "The suggestion dashboard is not configured yet. Ask an Admin to set it up."
         return null
     }
@@ -154,7 +162,7 @@ export default class SuggestionDashboard {
         publish = false
     ): Promise<void> {
         const error = this.getConfigurationError()
-        if (error || !this.canUseDashboard(interaction, publish)) {
+        if (error || !(await this.canUseDashboard(interaction, publish))) {
             await interaction.reply({
                 content:
                     error ||
@@ -312,14 +320,7 @@ export default class SuggestionDashboard {
                     ? "Suggestion dashboard · Main & Staff"
                     : "Suggestion dashboard · Main"
             )
-            .setDescription(
-                [
-                    heading,
-                    range,
-                    search,
-                    "\nPlease address all pre-existing comments"
-                ].join("\n")
-            )
+            .setDescription([heading, range, search].join("\n"))
             .setFooter({ text: footer })
         for (const suggestion of rows) {
             const number = suggestion.number ?? `${suggestion.extends} (follow-up)`
@@ -396,7 +397,7 @@ export default class SuggestionDashboard {
             return false
         try {
             const error = this.getConfigurationError()
-            if (error || !this.canUseDashboard(interaction)) {
+            if (error || !(await this.canUseDashboard(interaction))) {
                 await interaction.reply({
                     content: error || "You do not have access to this dashboard.",
                     flags: MessageFlags.Ephemeral
@@ -701,7 +702,7 @@ export default class SuggestionDashboard {
         const total = await this.createSuggestionQuery(filters).getCount()
         const range = discordDateRange(period)
         const description =
-            "Open the weekly overview or search all suggestions. Your menu and search results are only visible to you.\n\nPlease address all pre-existing comments"
+            "Open the weekly overview or search all suggestions. Your menu and search results are only visible to you."
         const embed = new EmbedBuilder()
             .setColor(0x728b62)
             .setTitle("Suggestions · weekly overview")
