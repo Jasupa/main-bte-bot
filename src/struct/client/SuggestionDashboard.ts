@@ -312,7 +312,14 @@ export default class SuggestionDashboard {
                     ? "Suggestion dashboard · Main & Staff"
                     : "Suggestion dashboard · Main"
             )
-            .setDescription([heading, range, search].join("\n"))
+            .setDescription(
+                [
+                    heading,
+                    range,
+                    search,
+                    "\nPlease address all pre-existing comments"
+                ].join("\n")
+            )
             .setFooter({ text: footer })
         for (const suggestion of rows) {
             const number = suggestion.number ?? `${suggestion.extends} (follow-up)`
@@ -694,7 +701,7 @@ export default class SuggestionDashboard {
         const total = await this.createSuggestionQuery(filters).getCount()
         const range = discordDateRange(period)
         const description =
-            "Open the weekly overview or search all suggestions. Your menu and search results are only visible to you."
+            "Open the weekly overview or search all suggestions. Your menu and search results are only visible to you.\n\nPlease address all pre-existing comments"
         const embed = new EmbedBuilder()
             .setColor(0x728b62)
             .setTitle("Suggestions · weekly overview")
